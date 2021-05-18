@@ -1,0 +1,66 @@
+---
+title: "Survey Tutorial - Final Project"
+author: "Your Name"
+matr.no: "Your Matriculation Number"
+subject: "Your subject"
+semester: "2020/21"
+output: html_document
+---
+## Information
+Please use this template for your final project in Survey Methodology Tutorial.
+
+- Check out the [R Markdown Cheat Sheet](https://rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf) or just Google if you need to recall some functionality.
+- Feel free to insert/split code chunks on your own:
+  - Mac: Cmd + Option/Alt + I 
+  - Windows: Ctrl + Alt + I
+- **Note:** We will only grade assignments, which compile through the *Knit* function in RStudio. 
+- **Plagiarism** will be detected and immediately charged with a 5.0 for all persons involved.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+
+```{r, message=FALSE}
+
+```
+
+## Milestone 0
+
+Please provide us your DataCamp username
+
+
+## Milestone 1: Basic Survey Encoding                                                   10
+
+### 1. Preparation:
+- Name the Survey-Dataset within the "Data" folder, which you want to work with.        
+- Based on the codebook and your theoretical knowledge about the domain, briefly provide a justified assumption about one causal relationship between a set of variables in the dataset. - Justify if you see potential confounders within your provided causal relationship.                         1
+- Name the type of sampling, your survey has been drawn with. If not available in the codebook, make a justified assumption.                                                                   1
+- Import the dataset into a local object.                                              1
+
+### 2. Preprocessing:
+- Provide an overview over the imported data.                                            1
+- If you picked survey data with multiple dates, filter down to one specific date.      1
+- Recode variables into their appropriate data type if needed. Briefly justify why you did or didn't recode.                                                                                  1
+
+### 3. Survey-Encoding:
+- Encode your survey data into a Svydesign-Object. Do not include weights yet. Make sure the encoding matches your mentioned/assumed sampling strategy above.                                 2
+- Calculate and interpret at least one quantity of interest (e.g. svymean, svytotal, svyby, svyciprop, etc.).                                                                                2
+
+
+
+
+
+## Milestone 2: Optimization Strategies                                                   10
+### 1. Survey weights
+- Do you have weights provided in your dataset? If yes, name the respective variable.     1
+- Briefly explain why weights are needed in survey data.                                  1
+- **Option A:** Re-Encode your surveydesign-object with the provided weights. Name and explain at least one reweighting-technique learned in the sessions. 
+- **Option B:** Build a weighted svydesign object based on a reweighting-technique, covered in the sessions. Thereby justify the variables you weighted on.
+- Re- Compute your quantity of interest from above and compare with your previous result. 3
+
+### 2. Missing Data
+- Check if you have any types of missing values in your data.                              1
+- Impute and briefly justify why and how you imputed (justify which variables and techniques you used for imputation).                                     3
+- Re-Compute your quantity of interest from above and compare with your previous results. 1

@@ -1,0 +1,33 @@
+---
+title: "Session 2"
+author: ""
+date: "11 12 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load the tidyverse
+```{r}
+
+```
+
+set a seed
+```{r}
+
+```
+
+Use a new code snippet for every exercise.
+
+1. load the 2012 French presidential election data
+2. inspect the data
+3. add a unique voter id, the total number of voters and the number of voters by station
+4. inspect the data again (check if new variables are correct)
+5. create a variable sample_size
+6. draw a simple random sample
+7. draw a stratified sample (strata = station, sample size = sample_size, size of strata = adjusted to number of voters per station)
+8. create a variable number_clusters
+9. draw a cluster sample with probability of being sampled according to the number of voters by station (clusters = station, number of clusters = number_clusters, probability = calculated probability)
+(10.) add a simple random sample as second stage to the cluster sample

@@ -1,0 +1,115 @@
+---
+title: "ISM Tut - Session 3 - The Survey Package"
+author: "Niklas Haffert"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preparations
+### Packages
+* survey: analyzing survey data
+* tidyverse: package for all tidy operations (dplyr, ggplot2, ...)
+```{r, message=FALSE}
+pacman::p_load(survey, tidyverse)
+```
+
+### Data
+3 different samples we specified in the last session and the original population data frame
+```{r load data}
+srs <- readRDS("../SessionData/usa_2016/srs.rds")
+str <- readRDS("../SessionData/usa_2016/str.rds")
+cl <- readRDS("../SessionData/usa_2016/cl.rds")
+```
+
+### New variables
+creating number clusters variable for cluster sampled data (51 clusters as we have 51 "states")
+```{r number clusters}
+cl <-
+  cl %>%
+  mutate(number_clusters = 51)
+```
+
+# Survey Design Object
+* svydesign object contains data and design information
+* created from sample (data frame) 
+* information about sampling design needs to be provided 
+
+### Simple Random Sampling Object
+* fpc: turnout (fpc = finite population correction)
+* id: staging information (in srs only one stage, therefore 1)
+```{r srs object}
+srs_obj <-
+  svydesign(data = srs,
+            fpc = ~ turnout,
+            id = ~ 1)
+```
+
+### Stratified Sampling Object 
+* strata: indicates which column holds information about strata
+* fpc changes from total population size to population size in strata
+```{r str object}
+str_obj <-
+  svydesign(
+    data = str,
+    fpc = ~ turnout_state,
+    id = ~ 1,
+    strata = ~ state
+  )
+```
+
+### Cluster Sampling Object (Multi Stage Sampling)
+* id now reflects sampling stages: first stage clusters, second stage individuals
+* fpc reflects population size in different stages: first stage number of clusters and second stage population size within the clusters
+```{r clus object}
+clus_obj <-
+  svydesign(
+    data = cl,
+    id = ~ state + voter_id,
+    fpc = ~ number_clusters + turnout_state
+  )
+```
+
+# Estimates
+With the svymean function the mean, based on the complex survey object, can be calculated (true values in the population: Clinton = 48.24%, Trump = 46.14%, Others = 5,62%)
+```{r svymean srs}
+svymean( ~ name, design = srs_obj)
+```
+
+We can also calculate confidence intervals (95%)
+```{r ci srs}
+svymean(~ name, design = srs_obj) %>%
+  as.data.frame() %>%
+  mutate(lower = mean - 1.96 * SE,
+         upper = mean + 1.96 * SE)
+```
+
+With the svytotal function a population total is estimated (true values in the population: Clinton = 65,844,241, Trump = 62,979,031, Others = 7,672,275)
+```{r svytotal str}
+svytotal( ~ name, design = str_obj)
+```
+
+Again CIs can be calculated
+```{r ci str}
+svytotal( ~ name, design = str_obj) %>%
+  as.data.frame() %>%
+  mutate(lower = total - 1.96 * SE,
+         upper = total + 1.96 * SE)
+```
+
+
+If you calculate the survey mean and the mean for the cluster sample without weighting according to the survey design, the difference becomes clear
+
+mean by svymean:
+```{r svymean cl}
+svymean( ~ name, design = clus_obj)
+```
+
+mean by standard mean function:
+```{r mean cl}
+cl %>%
+  count(name, name = "votes") %>%
+  mutate(perc = votes / sum(votes))
+```

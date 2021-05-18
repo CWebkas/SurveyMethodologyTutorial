@@ -1,0 +1,50 @@
+---
+title: "Session130121"
+author: "Lukas Weixler"
+date: "13 1 2021"
+output: html_document
+---
+
+```{r}
+pacman::p_load(tidyverse, survey)
+```
+
+### Generating today's fake dataset
+
+Inspired by https://rpubs.com/mhanauer/268281
+
+```{r}
+set.seed(12345)
+
+data <- tibble(.rows = 1000) %>% 
+  mutate(income = sample(c(seq(0, 100000)), 1000, replace = TRUE),
+         gender = sample(c("Male", "Female"), 1000, replace = TRUE),
+         education = sample(c("Middleschool", "Highschool", "College", "PhD"), 1000, replace = TRUE)
+         )
+```
+
+### Generating today's fake population distribution
+```{r}
+gender.dist <- tibble(gender = c("Male", "Female"),
+                       Freq =  c(0.45, 0.55) * 80000000)
+```
+
+
+## Exercises:
+
+#### Encode your fake dataset into a simple random sample surveydesign. Ignore the population distribution for now.
+
+#### Post-Stratify your data on gender with the known population distribution
+
+
+#### Rake your data on gender with the known population distribution
+
+
+#### Generate an additional population distribution dataset on the education variable (you may choose quantities as you like.
+
+
+#### Rake your data on gender and on education with the known population distributions
+
+
+#### Compare the population estimates for your unweighted, your post-stratified, and your two raked surveydesigns.
+

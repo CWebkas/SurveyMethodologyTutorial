@@ -1,0 +1,109 @@
+---
+title: "Roundup - Statistical Modelling"
+author: "Lukas Weixler"
+date: "11/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Useful terminology for any modelling discussion:
+- Observation
+- Variable
+- Hypothesis Test
+- Exogenous Variable
+- Correlation
+- Causal Effect
+- Causal Path
+- Identification
+- Causal Collider
+- Causal Fork
+- Causal Chain of mediation
+- Confounder
+- Substantive Literature
+
+- Go to [dagitty](http://www.dagitty.net/dags.html#) for causal identification of your model
+
+```{r, message=F}
+suppressWarnings(if (!require("pacman"))
+  install.packages("pacman"))
+pacman::p_load(ggdag, tidyverse)
+```
+
+```{r}
+# importing our dataset
+load('../SessionData/shoes.Rda')
+```
+
+Check out the dataset:
+```{r}
+glimpse(shoes)
+```
+
+Suspected relationship as a DAG in R
+```{r}
+coords <- list(
+  x = c(
+    shoe_size = 1,
+    gender = 2,
+    income = 3
+  ),
+  y = c(
+    shoe_size = 1,
+    gender = 2,
+    income = 1
+  )
+)
+
+dag <- dagify(income ~ shoe_size + gender,
+              shoe_size ~ gender,
+              coords = coords)
+
+ggdag(dag,
+      layout = "circle",
+      text_size = 2.5,
+      node_size = 18) +
+  theme_dag()
+```
+
+Today, we'll try to explain reasons for high income.
+Let's propose the following Null-Hypothesis: Shoe size doesn't have an effect on income.
+```{r}
+model_1 <- lm(income ~ shoe, data=shoes)
+
+summary(model_1)
+```
+
+Check it out graphically:
+```{r}
+
+qplot(x=shoe, y=income, data=shoes)
+
+qplot(x=shoe, y=income, data=shoes)+
+  geom_smooth(method='lm')
+```
+
+So do we have to reject the H0 and recognize the effect?
+Wait a minute and answer the following question: Are the two variables "shoe size" and "income" really exogenous?
+
+Is there any confounding variable? 
+
+
+
+Let's control for gender
+```{r}
+model2 <- lm(income ~ shoe + gender, data=shoes)
+summary(model2)
+
+```
+
+The entire effect is actually due to gender, for which we 'll find tons of substantive literature.
+```{r}
+qplot(x=shoe, y=income, data=shoes, color = gender) +
+  geom_jitter() +
+  geom_smooth(method='lm')
+```
+
+

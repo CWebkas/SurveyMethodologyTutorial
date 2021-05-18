@@ -1,0 +1,80 @@
+---
+title: "ISM Tut - Session 3 - Extra"
+author: "Niklas Haffert"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preparations
+### Packages
+* fastDummies: dummy variables from character variable
+* survey: analyzing survey data
+* tidyverse: package for all tidy operations (dplyr, ggplot2, ...)
+```{r, message = FALSE}
+pacman::p_load(fastDummies, survey, tidyverse)
+```
+
+### Functions
+Load functions stored in an external R-script 
+```{r}
+source("../functions.R")
+```
+
+### Seed
+Setting a seed allows to replicate random operations like sampling and get the same result
+```{r set a seed}
+set.seed(2020)
+```
+
+### Data
+load the original population data frame
+```{r load data}
+votes <- readRDS("../SessionData/usa_2016/us_2016.rds")
+```
+
+### new variable
+dummy variables for three candidates
+```{r dummy cols}
+votes <- 
+  votes %>%  
+  dummy_cols(select_columns = "name",
+             remove_selected_columns = TRUE) %>%
+  rename(clinton = 2,
+         other = 3,
+         trump = 4)
+```
+
+### Multiple Estimates
+Here we use a function to draw 100 simple random samples of 1000 individuals each. The function returns the mean and standard error for each sample. On this basis we calculate the 95% confidence intervals. We estimate the vote share (popular vote) for Hillary Clinton.
+```{r multiple samples}
+true_val <- mean(votes$clinton)
+
+srs_df <-
+  multiple_srs(df = votes,
+               col = ~ clinton,
+               n_samples = 100,
+               sample_sizes = 1000) %>%
+  mutate(upper = mean + 1.96 * se,
+         lower = mean - 1.96 * se) %>%
+  mutate(color = ifelse(true_val < upper &
+                          true_val > lower, "green", "red")) %>% 
+  arrange(mean) %>% 
+  mutate(run = 1:nrow(.))
+
+srs_df
+```
+
+Then we plot the point estimators (mean) and the confidence intervals. If the true value (solid black line) lies within the confidence interval, it is green, if not, it is red.
+```{r plotting}
+ggplot(srs_df, aes(x = mean, y = run, color = color)) +
+  geom_linerange(aes(xmin = lower, xmax = upper)) +
+  geom_vline(aes(xintercept = true_val)) +
+  geom_point() +
+  scale_colour_identity() +
+  theme(axis.title = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
+```

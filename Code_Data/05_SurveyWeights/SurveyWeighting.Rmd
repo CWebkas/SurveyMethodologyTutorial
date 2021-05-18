@@ -1,0 +1,198 @@
+---
+title: "ISM Tut - Session 5 - Generating Survey Weights"
+author: "Lukas Weixler"
+date: "09/01/2021"
+output: html_document
+---
+
+## Goals of this session:
+- Use and understand poststratification in R
+- Use and understand rake() function
+- Understand the impact of provided survey weights 
+
+## Preparations
+```{r}
+pacman::p_load(survey, tidyverse, readr, readxl)
+```
+
+```{r}
+
+X5 <- read_csv("../SessionData/5G/5GData.csv", locale = locale(decimal_mark = ",", encoding = "ISO-8859-1"))
+```
+
+### Check the imported data
+```{r}
+glimpse(X5)
+```
+
+### Create svydesign object based on provided weights
+```{r}
+wghtsDes <- svydesign(data=X5, id=~1, weights = ~gewicht)
+
+```
+
+
+### Create modified svydesign object without weights
+Let's assume, we didn't have the prepared weights within our Survey-Dataset:
+```{r, message=FALSE}
+# Omitting the weight variable from dataframe
+X5_nowght <- X5 %>% 
+  select(-gewicht)
+```
+
+
+### Build the svydesign object
+```{r, message=FALSE}
+X5DesNoWt <- svydesign(data = X5_nowght, strata = ~s3, id=~bl+bik, nest= T, weights = NULL)
+```
+
+
+## Poststratification
+Post-stratification adjusts the sampling and replicate weights so that the joint distribution of a set of post-stratifying variables matches the known population joint distribution.
+
+First, Let's check if samples per Bundesland match the known population distribution.
+```{r, message=FALSE}
+bl_sample <- X5_nowght %>% 
+  group_by(bl) %>% 
+  tally() %>% 
+  mutate(n = n/1521)
+```
+
+Import population data
+```{r}
+
+X02_bundeslaender <- read_excel("../SessionData/02-bundeslaender.xlsx", 
+    sheet = "Bundeslaender_mit_Hauptstadt", 
+    col_names = FALSE, skip = 6)
+```
+
+## Prepare Bundeslaender
+
+Assuming approx. 70000000 inhabitants above 15 based on official statistics
+```{r}
+bl_p <- X02_bundeslaender %>% 
+  select(c(1,4)) %>%
+  rename(bl = names(.)[1], n_real = names(.)[2]) %>% 
+  filter(!is.na(bl)) %>% 
+  slice(1:(n()-9)) %>% 
+  mutate(bl = sub("....", "", bl))
+
+bl_pop <- bl_p %>% 
+  mutate(n_real = n_real/sum(n_real)) %>% 
+  inner_join(bl_sample) %>% 
+  mutate(difference = abs(n_real-n)) %>% 
+  gather(type, inhabitants, c(n_real, n))
+  
+```
+
+## Compare 
+We compare shares of inhabitants for each Bundesland in the sample vs in the population.
+```{r}
+ggplot(bl_pop, aes(x=bl, y=inhabitants, fill=type, alpha=difference)) + geom_col(position='dodge') + theme(axis.text.x = element_text(angle = 90))
+
+
+```
+
+## Why adjust to 'Bundesland'?
+The imbalance between strata needs to be compensated, if we assume, that the variable "Bundesland" confounds the outcome variable "AFD sympathy" as well as your treatment "Opinion towards 5G". Such an assumption has to be stated with a justification. 
+In our case, a justification could be, that Bundesland defines your social background, which is likely to have an effect on both variables, therefore being a confounder. For more detailed causal identification check out [dagitty](http://www.dagitty.net/dags.html).
+
+## Post-Stratify on "Bundesland"
+```{r}
+
+# Obtain poststratification (ignore the warning - or rename n_real column to Freq)
+DesStr <- postStratify(design = X5DesNoWt , strata = ~bl, population = bl_p)
+```
+
+
+
+
+
+## Compare Post-Stratified design quantities with original 
+```{r}
+
+# Svymean of weightless unstatified dataset
+nowt <- svymean(~s7, X5DesNoWt, na.rm=T)
+
+# Svymean of poststratified dataset
+pstr <- svymean(~s7, DesStr, na.rm=T)
+
+# Svymean of original weights provided in dataset
+wght <- svymean(~s7, wghtsDes, na.rm=T)
+
+barplot(nowt, las = 2)
+barplot(pstr, las = 2)
+barplot(wght, las = 2)
+
+
+
+
+```
+
+Note, that the changes between weightless and poststratified are not substantial - but they are certainly visible (e.g. FDP with a notable difference). Remember, that you can poststratify for more than one variable - e.g. include education level as an additional quantity. Changes to weighted design are substantially larger! Therefore use weights if provided.
+
+A key issue to multivariate poststratification is, that we need to know the joint population distributions - often, they are not completely independent. Therefore, we look at a method, where we only need the marginal distributions: Raking.
+
+## Basic idea of Raking:
+- Adjust each variable iteratively towards its population distribution
+- Always take previous adjustment as starting point for next variable
+- Continue until no change appears.
+
+## Raking in R
+We want to adjust our weights both for inhabitants and for education level. Therefore we create two population data frames, having two columns: One carrying the variable name, specifying the different outcomes and one carrying the frequency within the population.
+_p <- read.csv("../SessionData/education.csv")
+
+
+### Create Dataset with konw population education shares (Statista)
+```{r}
+s3 <- unique(X5$s3)
+total <- 83166711
+Freq <- c(0.296*total,0.11*total, 0.325*total, 0.233*total, 0.036*total)
+educ_p <- data.frame(s3, Freq)
+
+```
+
+### Rake our svydesign on 5G with Bundesland and Education population quantities  
+```{r}
+
+# Rename count to avoid warning
+bl_p <- bl_p %>% rename(Freq = n_real)
+
+# Rake function with our two variables and the population distributions
+X5Rake <- rake(design = X5DesNoWt, sample.margins = list(~bl,~s3), population.margins = list(bl_p, educ_p))
+
+
+```
+
+
+## Compare quantities of interest
+Check out the svytotal of the poststratified design - finally usable.
+```{r}
+
+
+
+# Svymean of weightless unstatified dataset
+nowt <- svytotal(~s7, X5DesNoWt, na.rm=T)
+
+# Svymean of poststratified dataset
+pstr <- svytotal(~s7, DesStr, na.rm=T)
+
+# Svymean of raked dataset
+rake <- svytotal(~s7, X5DesNoWt, na.rm=T)
+
+# Svymean of original weights provided in dataset
+wght <- svytotal(~s7, wghtsDes, na.rm=T)
+
+
+barplot(nowt, las = 2)
+barplot(pstr, las = 2)
+barplot(rake, las = 2)
+barplot(wght, las = 2)
+```
+## An important note:
+
+The quantities for raking are the worst estimator in that case. This is because the education values are likely to be inaccurate. 
+
+
+
+

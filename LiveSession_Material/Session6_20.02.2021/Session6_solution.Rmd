@@ -1,0 +1,188 @@
+---
+title: "Session6"
+author: "Niklas Haffert"
+date: "20/01/2021"
+output: html_document
+---
+
+### Introduction
+In today's session, we are working again with the survey on 5G. The focus here is on imputing missing values (i.e. fields where we do not know the answer). To do this, we follow the same steps as shown in Monday's video. 
+In terms of content, we look at how the participants answer the question "Should Germany cooperate with the Chinese company Huawei in building the 5G network in Germany?".
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 0. loading packages
+```{r}
+pacman::p_load(mice, mitools, naniar, readr, survey, tidyverse)
+```
+
+### 1. loading data
+```{r}
+df <- read_csv2("ZA7674_v1-0-0.csv")
+```
+
+### 2. preprocess data
+```{r}
+# defining NAs
+na_strings <-
+  c("weiß nicht, keine Angabe", "keine Angabe")
+
+df_prep <-
+  df %>%
+  # select variables we want to use
+  select(
+    west_east = wo,
+    sex = s1,
+    age = s2,
+    edu = s3,
+    job = s4,
+    party = s7,
+    income = s9,
+    f_g_heard = V6,
+    f_g_pro = V7,
+    huawei = V11,
+    weight = gewicht
+  ) %>%
+  # replace NAs (defined strings)
+  replace_with_na_all(condition = ~ .x %in% na_strings) %>% 
+  # transform character variables to factor variables
+  mutate_if(is.character, as.factor) %>% 
+  # select only persons with knowledge on 5g
+  filter(f_g_heard == "ja")
+```
+
+### 3. check data
+use the map and the summary function to check if all variables are as expected
+```{r}
+map(df_prep, summary)
+```
+
+### 4. summary of missing values 
+summarize missing values in the data numerically and/or graphically (at least one approach from the video)
+```{r}
+miss_var_summary(df_prep)
+```
+
+```{r}
+gg_miss_var(df_prep)
+```
+
+### 5. predictor matrix
+create a predictor matrix and set variables which shouldn't be used for imputation to 0
+```{r}
+pred_matrix <- quickpred(df_prep)
+pred_matrix
+pred_matrix[, c("weight")] <- 0
+pred_matrix
+```
+
+### 6. methods for imputation
+using the mice function, create a vector containing the methods that will be used for imputation. Check if the methods are suitable and change the methods if necessary (an overview of the methods can be found in the documentation of the mice function).
+```{r}
+imp_meth <- 
+  mice(df_prep,
+     m = 1,
+     maxit = 1,
+     predictorMatrix = pred_matrix,
+       print = FALSE)$method %>% 
+  as.vector()
+
+imp_meth
+```
+
+### 7. imputation
+use the mice function to impute the missing data (use the vector containing the methods and the predictor matrix you created before)
+```{r}
+imp <-
+  mice(df_prep,
+       method = imp_meth,
+       predictorMatrix = pred_matrix,
+       seed = 1909,
+       print = FALSE)
+
+imp$m
+```
+
+### 8. combining imputed data sets
+use the complete function from the mice package and the imputationList function to create an imputed object
+```{r}
+imp_data <-
+  imputationList(map(seq(imp$m), mice::complete, data = imp))
+```
+
+### 9. survey design object
+create a survey design object for the imputed data and one for the unimputed data (just use weights)
+```{r}
+imp_design <-
+  svydesign(
+    data = imp_data,
+    id = ~ 1,
+    weights = ~ weight
+  )
+```
+
+```{r}
+un_imp_design <-
+  svydesign(
+    data = df_prep,
+    id = ~ 1,
+    weights = ~ weight
+  )
+```
+
+### 10. estimate
+calculate the mean for the huawei variable both for the imputed and unimputed data (optional: grouped by party)
+
+svymean for huawei (imputed data)
+```{r}
+with(imp_design, svymean(~ huawei)) %>% MIcombine() %>% summary()
+```
+
+svymean for huawei (data with NA)
+```{r}
+svymean(~huawei, design = un_imp_design, na.rm = TRUE)
+```
+
+svymean for huawei grouped by party (subset for parties in the Bundestag) (imputed data)
+```{r}
+with(subset(
+    imp_design,
+    party == c(
+      "CDU/CSU",
+      "SPD",
+      "AfD",
+      "FDP",
+      "Die Linke",
+      "Bündnis `90, Die Grünen"
+    )
+  ), svyby(
+  formula = ~ huawei,
+  by = ~ party,
+  FUN = svymean
+)) %>%
+  MIcombine() %>%
+  summary()
+```
+
+svymean for huawei grouped by party (subset for parties in the Bundestag) (data with NA)
+```{r}
+svyby(
+  formula = ~ huawei,
+  by = ~ party,
+  design = subset(
+    un_imp_design,
+    party == c(
+      "CDU/CSU",
+      "SPD",
+      "AfD",
+      "FDP",
+      "Die Linke",
+      "Bündnis `90, Die Grünen"
+    )
+  ),
+  FUN = svymean,
+  na.rm = TRUE
+)
+```

@@ -1,0 +1,25 @@
+---
+title: "Session3"
+author: ""
+date: "12/18/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Sampling informations:
+
+The srs data set contains a simple random sample. 
+The str data set contains a stratified sample with municipalities as strata and number of individuals per strata according to number of voters per municipality (turnout_municipality)
+The cl data set contains a cluster sample with voting station as cluster, 5 stations were sampled
+The cl_multi data set contains a multistage cluster sample with municipalities as clusters and simple random samples within each sampled cluster. 
+
+Number of municipalities and stations are stored in number_municipalities and number_stations. Turnout in turnout_municipality and turnout_station.
+
+1. Load the tidyverse and the survey package 
+2.Load the following data sets (srs, str, cl, cl_multi)
+3. Inspect the data
+4. Create survey design objects for each sample
+5. Use the svymean, svytotal or svyciprop functions for inference

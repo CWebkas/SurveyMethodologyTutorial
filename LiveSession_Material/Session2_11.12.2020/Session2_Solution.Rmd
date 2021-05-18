@@ -1,0 +1,109 @@
+---
+title: "Session 2"
+author: ""
+date: "11 12 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load the tidyverse
+```{r}
+pacman::p_load(tidyverse)
+```
+
+set a seed
+```{r}
+set.seed(2020)
+```
+
+Use a new code snippet for every exercise.
+
+1. load the 2012 French presidential election data
+```{r}
+load("Data/runoff.Rda") # pay attention where you have saved the runoff data set on your PC!
+```
+
+2. inspect the data
+```{r}
+glimpse(runoff)
+```
+
+3. add a unique voter id, the total number of voters and the number of voters by municipality
+```{r}
+runoff <- 
+  runoff %>%
+  mutate(voter_id = 1:nrow(.),
+         turnout = nrow(.)) %>%
+  left_join(runoff %>%
+              group_by(municipality) %>%
+              count(name = "turnout_municipality"))
+```
+
+4. inspect the data again (check if new variables are correct)
+```{r}
+glimpse(runoff)
+```
+
+5. create a variable sample_size
+```{r}
+sample_size <- 2500
+```
+
+6. draw a simple random sample
+```{r}
+srs <- 
+  runoff %>% 
+  sample_n(sample_size)
+
+glimpse(srs)
+```
+
+7. draw a stratified sample (strata = municipality, sample size = sample_size, size of strata = adjusted to number of voters per municipality)
+```{r}
+str <- 
+  runoff %>% 
+  mutate(voters_strata = round(sample_size * turnout_municipality / turnout)) %>%
+  group_by(municipality) %>%
+  sample_n(voters_strata) %>%
+  ungroup()
+
+glimpse(str)
+```
+
+8. create a variable number_clusters
+```{r}
+number_clusters <- 5
+```
+
+9. draw a cluster sample with probability of being sampled according to the number of voters by municipality (clusters = municipality, number of clusters = number_clusters, probability = calculated probability)
+```{r, message=FALSE}
+municipalities <- 
+  runoff %>%
+  mutate(p_1 = number_clusters * turnout_municipality / turnout) %>%
+  group_by(municipality, p_1) %>%
+  summarise() %>%
+  ungroup() %>%
+  sample_n(size = number_clusters, weight = p_1) %>% 
+  pull(municipality)
+
+clusters <- 
+  runoff %>% 
+  filter(municipality %in% municipalities)
+
+glimpse(clusters)
+```
+
+(10.) add a simple random sample as second stage to the cluster sample
+```{r}
+cl <- 
+  clusters %>% 
+  group_by(municipality) %>% 
+  sample_n(sample_size / number_clusters) %>% 
+  ungroup()
+
+glimpse(cl)
+```
+

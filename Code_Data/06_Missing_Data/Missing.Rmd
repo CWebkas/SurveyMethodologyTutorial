@@ -1,0 +1,298 @@
+---
+title: "ISM Tut - Session 6 - Missing Data"
+author: "Niklas Haffert"
+date: '`r format(Sys.time(), "%d. %B %Y")`'
+output: html_document
+---
+
+# Goal of the session
+* Labeling missing data as NA
+* Visualizing missing data
+* Imputing missing data
+* Using imputed data for estimating quantities of interest
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preparations
+### Packages
+* haven: read data (STATA format)
+* mice: multiple imputation
+* mitools: handling data from multiple imputations
+* naniar: visualize missing data
+* purrr: functional programming
+* survey: analyzing survey data
+* tidyverse: all tidy operations (dplyr, ggplot2, ...)
+```{r}
+pacman::p_load(haven, mice, mitools, naniar, purrr, survey, tidyverse)
+```
+
+### Data
+```{r, message=FALSE}
+anes <- read_dta("../SessionData/anes_2016/anes_timeseries_2016.dta")
+```
+
+# Inspecting Missing Data 
+Create a data frame in which NAs that are not labeled as such are replaced by NAs.
+```{r}
+na_strings <-
+  c(
+    "-9. Refused",
+    "-8. Don't know (FTF only)",
+    "-5. Interview breakoff (sufficient partial IW)",
+    "-9. RF (-9) in V161193 or V161193a",
+    "-8. DK (-8) in V161193 or V161193a (FTF only)"
+  )
+
+anes_prep <-
+  anes %>%
+  # 1. Select variables of interest and rename cryptic variable names into something we understand
+  select(
+    V160201,
+    V160102,
+    V160202,
+    vote_last = V161006,
+    obama_score = V161092,
+    chr_fund_score = V162095,
+    primary_voter = V161021,
+    think_gov_spend = V161514,
+    undoc_kids = V161195x,
+    voting_purpose = V161031
+  ) %>%
+  # 2.
+  replace_with_na_all(condition = ~ .x %in% na_strings |
+                        (as.integer(.x) < 0 |
+                           as.integer(.x) >= 998)) %>%
+  # 3. Reestablish factor levels - note: This is just for illustrative purposes.
+  mutate(
+    vote_last = factor(
+      vote_last,
+      levels = 1:2,
+      labels = c("Obama", "Romney")
+    ),
+    obama_score = as.numeric(obama_score),
+    chr_fund_score = as.numeric(chr_fund_score),
+    primary_voter = factor(
+      primary_voter,
+      levels = 1:2,
+      labels = c("yes", "no")
+    ),
+    think_gov_spend =
+      factor(
+        think_gov_spend,
+        levels = 1:4,
+        labels =
+          c('foreign aid', 'medicare', 'national defense', 'social security')
+      ),
+    undoc_kids =
+      factor(
+        undoc_kids,
+        levels = 1:6,
+        labels =
+          c(
+            'should sent back - favor a great deal',
+            'should sent back - favor a moderate amount',
+            'should sent back - favor a little',
+            'should allow to stay - favor a little',
+            'should allow to stay - favor a moderate amount',
+            'should allow to stay - favor a great deal'
+          )
+      ),
+    voting_purpose = factor(
+      voting_purpose,
+      levels = 1:2,
+      labels =
+        c('Clinton',
+          'Trump')
+    )
+  )
+```
+
+Summary for all variables. 
+```{r}
+anes_prep %>% map(summary)
+```
+
+Summary how many missing values there are per variable. 
+```{r}
+miss_var_summary(anes_prep)
+```
+
+Visualization of the extent of missing data.
+```{r}
+gg_miss_var(anes_prep)
+```
+
+Visualization of how the missing values are distributed within the data frame. 
+```{r}
+vis_miss(anes_prep)
+```
+
+# Imputation 
+```{r}
+map(anes_prep, class) 
+```
+
+Based on the anes_prep created data set, we create a predictor matrix. We use the quickpred function, which helps to build a good imputation model for data with many variables. If the correlation between two variables exceeds a threshold value (default 0.1), we include them as predictors.
+```{r}
+pred_matrix <- quickpred(anes_prep)
+
+pred_matrix
+```
+
+In this step we remove the variables we do not want to use for imputation.
+```{r}
+pred_matrix[, c("V160201", "V160102", "V160202")] <- 0
+
+pred_matrix
+```
+
+Next, we let us display which methods were used to impute the respective variable. An explanation about the different procedures can be found in the "R Documentation" of the mice package.
+```{r}
+imp_meth <- 
+  mice(anes_prep,
+     m = 1,
+     maxit = 1,
+     predictorMatrix = pred_matrix,
+       print = FALSE)$method %>% 
+  as.vector()
+
+imp_meth
+```
+
+Checking methods.
+```{r}
+?mice
+```
+
+Changing methods used for prediction. 
+```{r}
+imp_meth[5:6] <- "norm.predict"
+imp_meth
+```
+
+Imputation with the mice function.
+```{r}
+imp <-
+  mice(anes_prep,
+       method = imp_meth,
+       predictorMatrix = pred_matrix,
+       seed = 2020,
+       print = FALSE)
+```
+
+Create a imputation list which is used for the following analysis. The function complete takes an object of class mids (imp in our case), fills in the missing data, and returns the completed data. map is used to apply complete to all five imputations. imputationList combines data sets into one list.
+```{r}
+imp_data <-
+  imputationList(map(seq(imp$m), mice::complete, data = imp))
+```
+
+# Survey Design Objects
+Survey Design Object for all five imputed data frames. 
+```{r}
+imp_design <-
+  svydesign(
+    ~ V160202 ,
+    strata = ~ V160201 ,
+    data = imp_data ,
+    weights = ~ V160102 ,
+    nest = TRUE
+  )
+```
+
+Survey Design Object for unimputed data.
+```{r}
+unimp_design <-
+  svydesign(
+    ~ V160202 ,
+    strata = ~ V160201 ,
+    data = anes_prep ,
+    weights = ~ V160102 ,
+    nest = TRUE
+  )
+```
+
+# Estimates
+## Mean
+Mean for voting_purpose (imputed data).
+```{r, message=FALSE}
+imp_results <- with(imp_design, svymean(~ voting_purpose))
+summary(MIcombine(imp_results))
+```
+
+Mean for voting_purpose (data without imputation).
+```{r}
+svymean(~ voting_purpose , unimp_design, na.rm = TRUE)
+```
+
+## Mean by group
+Mean for knowledge on government spending grouped by voting purpose (using imputed data). Results displayed as barplot. 
+```{r,message=FALSE,results=FALSE,fig.show=TRUE}
+with(
+  imp_design,
+  svyby(
+    formula = ~ voting_purpose,
+    by = ~ think_gov_spend,
+    FUN = svymean
+  )
+) %>% 
+  MIcombine() %>% 
+  summary() %>%
+  mutate(names = rownames(.)) %>%
+  separate(names, c("think_gov_spend", "voting_purpose"), sep = ":") %>%
+  mutate(voting_purpose = str_remove(voting_purpose, "voting_purpose")) %>%
+  ggplot(aes(
+    x = think_gov_spend,
+    y = results,
+    group = voting_purpose,
+    fill = voting_purpose
+  )) +
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_fill_manual(values = c("blue", "red"))
+```
+
+Same as before but with unimputed data.
+```{r}
+bar_vote <-
+  svyby(
+    formula = ~ voting_purpose,
+    by =  ~ think_gov_spend,
+    design = unimp_design,
+    FUN = svymean,
+    na.rm = TRUE
+  )
+
+barplot(bar_vote, ylab = "Share", col = c("blue", "red"))
+
+legend(
+  "topright",
+  legend = c("Clinton", "Trump"),
+  fill = c("blue", "red"),
+  cex = 0.55
+)
+```
+
+## Regression
+Logistic Regression with voting purpose as dependent variable and knowledge on government spending, opinion on illegal immigrant children and christian fundamentalist score as independent variables, using imputed data.
+```{r, warning=FALSE}
+with(
+  imp_design,
+  svyglm(
+    voting_purpose ~ think_gov_spend + undoc_kids + chr_fund_score,
+    family = stats::binomial()
+  )
+) %>%
+  MIcombine() %>% 
+  summary()
+```
+
+Same regression but with unimputed data.
+```{r, warning=FALSE}
+svyglm(
+      voting_purpose ~ think_gov_spend + undoc_kids + chr_fund_score,
+      family = stats::binomial(),
+      design = unimp_design
+    ) %>% 
+  summary()
+```

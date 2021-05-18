@@ -1,0 +1,110 @@
+---
+title: "Session3"
+author: ""
+date: "17 12 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Sampling informations:
+
+The srs data set contains a simple random sample. 
+The str data set contains a stratified sample with municipalities as strata and number of individuals per strata according to number of voters per municipality (turnout_municipality)
+The cl data set contains a cluster sample with voting station as cluster, 5 stations were sampled
+The cl_multi data set contains a multistage cluster sample with municipalities as clusters and simple random samples within each sampled cluster. 
+
+Number of municipalities and stations are stored in number_municipalities and number_stations. Turnout in turnout_municipality and turnout_station. The variable vote is indicating if an individual voted for Holland (1) or Sarkozy (0) in the second round of the 2012 French presidential election.
+
+0. Settings for lonely PSU 
+```{r}
+options(survey.adjust.domain.lonely = TRUE)
+options(survey.lonely.psu = "adjust")
+```
+
+1. Load the tidyverse and the survey package 
+```{r}
+pacman::p_load(survey, tidyverse)
+```
+
+2. Load the following data sets (srs, str, cl, cl_multi)
+```{r}
+srs <- readRDS("Data/srs.rds")
+str <- readRDS("Data/str.rds")
+cl <- readRDS("Data/cl.rds")
+cl_multi <- readRDS("Data/cl_multi.rds")
+```
+
+3. Inspect the data
+```{r}
+glimpse(srs)
+glimpse(str)
+glimpse(cl)
+glimpse(cl_multi)
+```
+
+4. Create survey design objects for each sample
+```{r}
+srs_obj <-
+  svydesign(data = srs,
+            fpc = ~ turnout,
+            id = ~ 1)
+```
+
+```{r}
+str_obj <-
+  svydesign(
+    data = str,
+    fpc = ~ turnout_municipality,
+    id = ~ 1,
+    strata = ~ municipality
+  )
+```
+
+```{r}
+clus_obj <-
+  svydesign(
+    data = cl,
+    id = ~ station,
+    fpc = ~ number_stations
+  )
+```
+
+```{r}
+clus_multi_obj <-
+  svydesign(
+    data = cl_multi,
+    id = ~ municipality + voter_id,
+    fpc = ~ number_municipalities + turnout_municipality
+  )
+```
+
+5. Use the svymean, svytotal or svyciprop functions for inference
+```{r}
+svymean(~vote, design = str_obj)
+```
+
+```{r}
+svymean(~vote, design = srs_obj) %>% 
+  as.data.frame() %>%
+  rename(se = 2) %>% 
+  mutate(lower = mean - 1.96 * se,
+         upper = mean + 1.96 * se)
+```
+
+```{r}
+svytotal(~vote, design = clus_obj)
+```
+
+```{r}
+svymean(~vote, design = clus_multi_obj) %>% 
+  as.data.frame() %>%
+  rename(se = 2) %>% 
+  mutate(lower = mean - 1.96 * se,
+         upper = mean + 1.96 * se)
+
+svyciprop(~vote, design = clus_multi_obj)
+```
+

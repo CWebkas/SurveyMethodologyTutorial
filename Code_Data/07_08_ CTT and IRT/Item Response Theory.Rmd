@@ -1,0 +1,243 @@
+---
+title: "Item Response Theory"
+author: "Lukas Weixler"
+date: "06/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Goals of today's session
+- Understand why we apply CTT and IRT in practice
+- Interpret the alpha values from CTT
+- Obtain a bidimensional and multidimensional Rasch model for a latent construct
+- Interpret IRT plots
+
+
+### Preparations
+If you encounter any loading issues install the packages via install.packages(<pckg>)
+```{r, message = F}
+pacman::p_load(tidyverse, naniar, mice, mitools, purrr, psych)
+
+refs <- read.csv('../SessionData/Polarization/ZA6732_v1-0-0.csv',sep=';')
+
+```
+
+
+
+### Practical Steps for binary IRT
+1. Name your latent (not clearly quantifiable) construct
+2. Name and justify the items (single variables) you use to measure your latent construct
+3. Choose the appropriate model based on a set of questions:
+- Are units always supposed to follow your ideal ranking? 
+  - Use Guttman if yes
+- - Nonparametric vs parametric? (implies ordinal vs continuous latent variable)
+  - Use Rasch if parametric
+- Else use Mokken
+
+### Example
+- Step 1: Susceptibility to right-wing populist election campaigns
+- Step2: Let's check our polarization dataset:
+
+```{r}
+refs %>% 
+glimpse()
+```
+
+For our construct we'll include V30, V31, V33, V39, V41, V43. You may check out the question formulation in the codebook if you want.
+
+### Binarize the responses
+Since we still assess only binary outcomes, we'll have to transform our dataset respectively. For V2_1 and V2_2 we need to get rid of the neutral statements.
+
+```{r}
+refs_opin <- refs %>% 
+  
+  # Type casting
+  mutate_if(is.character, as.factor) %>% 
+  
+  # Selecting
+  select(V30, V31, V33, V39, V41, V43) %>%
+  
+  # Renaming
+  rename(EU = V43, Refugees = V41, RefugeeService=V39, Marriage = V31, ChildCare = V33, Foreigners = V30) %>%
+  
+  # Binarizing through nested ifelse statement
+  mutate_all(function(x) 
+    ifelse(x %in% c('gerade richtig', 'eher Vorteile', 'kulturelle Bereicherung', 
+                    'eher gut', 'zu wenig getan', 'hat keine großen Auswirkungen', 
+                    'sollte sich da nicht so viel ändern', 
+                    'wenn sich die Mitgliedsstaaten künftig enger zusammenschließen'
+                    ), 0, 
+           ifelse(x %in% c('keine Angabe'
+                           ), NA, 
+                  1)
+           )
+    )
+
+
+```
+
+
+### Plotting the missings
+Before moving on, let's check on missings and impute as learned in the last session.
+```{r}
+
+gg_miss_var(refs_opin)
+
+```
+
+### Impute the missings - Check the session on missings for details
+
+```{r}
+# Imputation 
+
+
+# Predictor matrix
+pred_matrix <- quickpred(refs_opin)
+
+
+# Determine method for each column
+imp_meth <- 
+  mice(refs_opin,
+     m = 1,
+     maxit = 1,
+     predictorMatrix = pred_matrix,
+       print = FALSE)$method %>% 
+  as.vector()
+
+# Perform imputation
+imp <-
+  mice(refs_opin,
+       method = imp_meth,
+       predictorMatrix = pred_matrix,
+       seed = 2020,
+       print = FALSE)
+
+
+
+```
+
+```{r}
+# Helper function to get the mode of a set of values
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+```
+
+### Obtain imputation dataset through mode calculation for each row
+We take the value, which is represented in the majority of the five imputation datasets
+```{r}
+imp_refs_opin <- imp %>% 
+  complete('long', inc=FALSE) %>% 
+  group_by(.id) %>% 
+  summarise_all(getmode) %>% 
+  select(-.id, -.imp)
+```
+
+### CTT
+
+Does a set of items measure the same construct? 
+I.e. does a single item correlate to a certain degree with the overall score?
+```{r}
+round(cor(imp_refs_opin, use = "pairwise.complete.obs"), 2)
+```
+### Interpretation, Optimization
+
+- raw_alpha: *Cronbach’s α (values ≥ .7 or .8 indicate good reliability*; Kline (1999))
+- *reliability if one item was dropped*: We consider dropping item if reliability improves.
+- raw.r: correlation between the item and the total score from the scale (i.e., item-total correlations); there is a problem with raw.r, that is, the item itself is included in the total—this means we’re correlating the item with itself, so of course it will correlate (r.cor and r.drop solve this problem; see ?alpha for details)
+- r.drop: item-total correlation without that item itself (i.e., item-rest correlation or corrected item-total correlation); low item-total correlations indicate that that item doesn’t correlate well with the scale overall
+- r.cor: item-total correlation corrected for item overlap and scale reliability
+mean and sd: mean and sd of the scale if that item is dropped
+
+- All items should correlate the the total score, so we’re looking for items that don’t correlate with the overall score from the scale. *If r.drop values are less than about .3, it means that particular item doesn’t correlate very well with the scale overall*.
+
+
+Check https://rpubs.com/hauselin/reliabilityanalysis for further details.
+
+
+```{r, message=FALSE}
+refs_alpha <- alpha(imp_refs_opin, na.rm = TRUE)
+refs_alpha
+```
+
+### Omit ChildCare and Marriage variables
+
+```{r}
+reduced_dat <- imp_refs_opin %>% select(-ChildCare, -Marriage)
+
+alpha(reduced_dat, na.rm = TRUE)
+
+```
+
+
+
+
+
+### IRT
+Method originally comes from education research:
+- Which item is more "difficult"?
+- Here: Which item depicts a stronger Susceptibility to right-wing populist election campaigns?
+- For a valid ordering, we 'd furthermore assume, that if a respondent's answer is positive on a strong question, he'd also answer positive on a weaker question.
+
+
+### Further imports here due to conflicts
+```{r, message=F}
+pacman::p_load(ltm, mitools,mice,eRm, diffr, mirt, psych)
+
+```
+
+
+
+
+
+### Step 3: Chosing the best model:
+
+- Are units always supposed to follow your ideal ranking? 
+  - Use Guttman if yes
+#### No
+- Nonparametric vs parametric? (implies ordinal vs continuous latent variable)
+#### Parametric
+  - Use Rasch if yes
+- Else use Mokken
+
+
+
+### Obtain Rasch model for first dataset
+```{r}
+#refs_opin_imp <- imp_data$imputations[[1]]
+```
+
+### Using the Rasch model on our four items
+
+Item difficulty shows: Foreigners question is easiest, personal disadvantage due to refugees is hardest, foreigners is easiest
+```{r}
+model1 <- RM(reduced_dat)
+betas <- -coef(model1)
+sort(betas)
+```
+# Plotting the joint Item Characteristic Curves 
+They depict the probabilities for a positive answer, depending on their latent dimension (number of positive responses). Note that the replacement of neutrals with positives lets our V2 Variables look more powerful (i.e. if a participant is positive on V3c and V1b he should also be positive on the others).
+```{r}
+plotjointICC(model1, item.subset = 1:4)
+```
+
+
+
+# Plot the person-item map
+This map displays the location of an item as well as the distribution of person parameters along the latent dimension (in our case opinion towards refugee policy).
+We may compare this to the overall person-parameter distribution.
+Execute `?plotPImap` for more information.
+```{r}
+plotPImap(model1, sorted=TRUE)
+```
+
+### Further IRT: Look at Guttman, Mokken and non-binaries
+https://hansjoerg.me/2018/04/23/rasch-in-r-tutorial/
+
+They also present an advanced approach: Multi-Factor modelling - if we had more than two factors, this might be a reasonable approach. Nevertheless, out of the very narrow field of social science surveys, this is barely used.
+
+

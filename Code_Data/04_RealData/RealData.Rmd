@@ -1,0 +1,326 @@
+---
+title: "ISM Tut - Session 4 - Working with real data"
+author: "Lukas Weixler"
+date: "12/19/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Goal of the session
+- Data Preparation 
+    - Concerning Variable selection, Data Types and hidden NAs
+    
+- Recap `svydesign()` function, apply on real survey data: Encoding gets easier, preparation gets harder.
+    - Note: Encoding as learned in last session is impractical when dealing with institutional survey data
+    - Always check out codebook of your survey data for two things:
+      a) Is there a manual on how to encode the survey?
+      b) Are there weights in the survey dataset, which I should include?
+    - Only if none of the above applies, you may consider classical encoding.
+    
+- Enlarge knowledge about Survey-Quantities of interest
+
+
+
+```{r setup, include=FALSE, message=F}
+knitr::opts_chunk$set(message = TRUE)
+```
+
+## Importing real Data
+
+When dealing with real data, we usually face additional issues, which we need to be aware of: 
+
+- Unreadable format (this session) 
+- Unreadable format (Complicated variable names)
+- Inaccurate data type (this session)
+- Missing values (next session)
+
+Further challenges will be covered towards the end of the semester
+
+- Outlier handling
+- Dimensionality reduction
+
+Dataset is the American National Election Study.
+Check out [description](https://electionstudies.org/) and PDF codebook for further information.
+
+### Preparations
+
+```{r, message = FALSE}
+pacman::p_load(survey, tidyverse, naniar, foreign, srvyr)
+
+```
+
+
+## Read the dataset 
+You may as well `glimpse()` - just note that we deal with many variables.
+
+```{r}
+anes <- read.dta("../SessionData/anes_2016/anes_timeseries_2016_Stata12.dta")
+```
+
+### Data Preparation
+Looks like a tough bunch - no worries - here's what happens step by step:
+
+1. Preparation: Specify outcomes, which we want to treat as NA
+
+2. Specify variable name for prepared dataset
+
+3. Select variables of interest
+
+4. Rename cryptic variable names into something we understand
+
+5. Replace above strings with NA, as well as levels below zero and 999
+
+6. (Optional) Reestablish factor levels
+
+```{r}
+
+# 1. Preparation: Specify outcomes, which we want to treat as NA
+na_strings <- c("-9. Refused", "-8. Don't know (FTF only)", "-5. Interview breakoff (sufficient partial IW)", "-9. RF (-9) in V161193 or V161193a", "-8. DK (-8) in V161193 or V161193a (FTF only)")
+
+# 2. Specify variable name for prepared dataset
+anes_prep <- anes %>%
+  # 3. Select variables of interest
+  select(V160201,V160102,V160202, V162094,V162095,V161021,V161514,V161195, V161195x, V161031) %>% 
+  
+  # 4. Rename cryptic variable names into something we understand
+  rename(pope_francis_score = V162094,
+         christian_fundamentalist_score = V162095,
+         primary_voter = V161021,
+         think_gov_spend = V161514,
+         undoc_kids = V161195x,
+         voting_purpose = V161031) %>% 
+  
+  # 5. Replace above strings with NA, as well as levels below zero and 999
+  replace_with_na_all(condition = ~ .x %in% na_strings |(as.integer(.x) < 0 | as.integer(.x) == 999)) %>% 
+  
+  # 6. Reestablish factor levels - note: This is just for illustrative purposes.
+  mutate( think_gov_spend =
+            factor( think_gov_spend , levels = 3:6 , labels =
+                c( 'foreign aid' , 'medicare' , 'national defense' , 'social security' )
+            ) ,
+        
+        undoc_kids =
+            factor( undoc_kids , levels = 3:8 , labels =
+                c( 'should sent back - favor a great deal' ,
+                    'should sent back - favor a moderate amount' ,
+                    'should sent back - favor a little' ,
+                    'should allow to stay - favor a little' ,
+                    'should allow to stay - favor a moderate amount' ,
+                    'should allow to stay - favor a great deal' )),
+        voting_purpose = factor( voting_purpose , levels = 4:5 , labels =
+                c( 'Clinton' ,
+                    'Trump' ))
+        )
+```
+
+
+
+### Encode our prepared dataset into a surveydesign-object
+Please read p.4 and 6 of the codebook before moving on. You will obtain necessary information about the follwing two things: 
+#### 1. Sampling Strategy 
+  - Counties stratified by multiple variables
+  - PPS to number of adult citizens in every stratum
+  - Four census Block groups from every drawn county
+  - random households within each block group
+  
+#### 2. Weighting
+  - Manual when to use which weight provided within the codebook on P6. We'll use the second weight, including pre- and post election questions.
+  
+Note: Encoding this sampling strategy all by hand is not required, since the authors have provided weights for us. This is the case for most of the publicly usable survey datasets. Encoding a sampling strategy by hand today usually occurs only for replications or own surveys. 
+
+### Survey encoding
+```{r}
+
+# Encoding the surveydesign object into the anes_design variable as indicated on p 6
+# This is the base-R way to do it - you may chose which way you prefer.
+anes_design <-
+    svydesign(
+        
+      # Clusters
+        ids = ~V160202 , 
+        
+      # Strata  
+        strata = ~V160201 , 
+        
+      # Dataset
+        data = anes_prep ,
+      
+      # Weights
+        weights = ~V160102 , 
+        
+      # Dummy parameter 
+        nest = TRUE
+    )
+```
+
+
+### Using our newly created surveydesign object for population estimations
+We now may apply the full scope of survey functions on our newly encoded surveydesign object.
+Check [documentation](https://www.rdocumentation.org/packages/survey/versions/4.0) for possible functions.
+
+Note: The plots don't carry the standard errors. Please check out the tables for this information.
+
+
+```{r}
+
+# Surveymean on Voting purpose
+svymean( ~voting_purpose , anes_design , na.rm = TRUE )
+a <- svymean( ~voting_purpose , anes_design , na.rm = TRUE )
+barplot(a, cex.names=0.7 , col=c("blue", "red"))
+legend("topright", 
+       legend = c("Clinton", "Trump"), 
+       fill = c("blue","red"),
+       cex = 0.55)
+
+
+# Surveymean on Voting purpose, grouped on spending preferences
+svyby( ~voting_purpose, by=~think_gov_spend , design=anes_design , svymean , na.rm = TRUE )
+b <- svyby( ~voting_purpose, by=~think_gov_spend , design=anes_design , svymean , na.rm = TRUE )
+
+barplot(b, ylab="Share", col=c("blue", "red"))
+legend("topright", 
+       legend = c("Clinton", "Trump"), 
+       fill = c("blue","red"),
+       cex = 0.55)
+
+```
+
+
+### Alternative Way of Survey encoding 
+Assuming there are weights, but there is no manual - this will be most often the case - also in your projects.
+```{r}
+
+anes_design_alt <-
+    svydesign( 
+        ids = ~1 ,  
+        data = anes_prep , 
+        weights = ~V160102
+    )
+
+```
+
+### Survey Quantities with alternative encoding (no manual but weights)
+Note that we have slightly smaller standard errors - this increases the risk for falsely denied Null-Hypotheses a bit.
+```{r}
+# Surveymean on Voting purpose
+svymean( ~voting_purpose , anes_design_alt , na.rm = TRUE )
+a <- svymean( ~voting_purpose , anes_design_alt , na.rm = TRUE )
+barplot(a, cex.names=0.7 , col=c("blue", "red"))
+legend("topright", 
+       legend = c("Clinton", "Trump"), 
+       fill = c("blue","red"),
+       cex = 0.55)
+
+
+# Surveymean on Voting purpose, grouped on spending preferences
+svyby( ~voting_purpose, by=~think_gov_spend , design=anes_design_alt , svymean , na.rm = TRUE )
+b <- svyby( ~voting_purpose, by=~think_gov_spend , design=anes_design_alt , svymean , na.rm = TRUE )
+
+barplot(b, ylab="Share", col=c("blue", "red"))
+legend("topright", 
+       legend = c("Clinton", "Trump"), 
+       fill = c("blue","red"),
+       cex = 0.55)
+```
+
+
+### Obtaining quantities of interest from `svymean()`
+
+
+```{r}
+# Obtaining svymean
+this_result <- svymean( ~ pope_francis_score , anes_design , na.rm = TRUE )
+
+# Point estimates
+print('Coefficients')
+coef( this_result )
+
+# Standard Error
+print('Standard Error')
+SE( this_result )
+
+# Confidence interval (95% by default)
+print('Confidence interval')
+confint( this_result )
+
+# Normalized variance based on mean size
+print('Coefficient of variation')
+cv( this_result )
+
+
+```
+#### Another Example
+
+```{r}
+
+# Storing svymean in variable
+this_result <- svymean( ~ voting_purpose , anes_design , na.rm = TRUE )
+
+# Point estimates
+print('Coefficients')
+coef( this_result )
+
+# Standard Error
+print('Standard Error')
+SE( this_result )
+
+# Confidence interval (95% by default)
+print('Confidence interval')
+confint( this_result )
+
+# Normalized variance based on mean size
+print('Coefficient of variation')
+cv( this_result )
+```
+
+### Grouped `svymean()` results may also be used for quantities of interest:
+
+
+```{r}
+grouped_result <-
+    svyby( 
+        ~ pope_francis_score , 
+        ~ voting_purpose , 
+        anes_design , 
+        svymean ,
+        na.rm = TRUE 
+    )
+print('Coefficients')
+coef( grouped_result )
+print('Standard Error')
+SE( grouped_result )
+print('Confidence interval')
+confint( grouped_result )
+print('Coefficient of variation')
+cv( grouped_result )
+```
+### Obtaining a t test on a continuous dependent variable
+We want to test if people rate the pope different, depending on their voting preferences.
+```{r}
+test <- svyttest( pope_francis_score ~ voting_purpose , anes_design)
+print('Estimate')
+test$estimate
+print('Confidence Interval')
+test$conf.int
+print('P Value')
+test$p.value
+
+```
+
+
+### Estimating the population total (careful!)
+Note, that non-manual encoding leads to irritating svytotal estimates. Therefore, we need to use poststratification, before obtaining useful svytotal estimates
+
+```{r}
+svytotal( ~ voting_purpose , anes_design , na.rm = TRUE )
+
+svyby( ~ voting_purpose , ~ think_gov_spend , anes_design , svytotal , na.rm = TRUE )
+```
+
+
+### Goal for next session: Deal with NAs
+Then we will be able to also obtain GLM results, i.e. model vote outcome for Trump vs Clinton based on variables. Right now, we would get an error, due to present NAs.
+
+
+

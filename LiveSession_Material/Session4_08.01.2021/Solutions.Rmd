@@ -1,0 +1,85 @@
+---
+title: "5GProj"
+author: "Lukas Weixler"
+date: "5 1 2021"
+output: html_document
+---
+
+
+```{r}
+pacman::p_load(tidyverse, readr, naniar, survey)
+```
+
+
+
+```{r}
+?read_delim
+
+five_gdat <- read_delim("5GData.csv", delim=",", locale = locale(encoding = "latin1") )
+```
+
+
+```{r}
+glimpse(five_gdat)
+```
+
+
+```{r}
+na_strings <- c("weiß nicht, keine Angabe")
+
+five_gdat_prepared <- five_gdat %>% 
+  select(gewicht, bik, s3, datum, s7, V6, V7) %>% 
+  rename(partei=s7, funfGhort = V6, proFunfG = V7) %>% 
+  filter(datum == as.Date("2020/06/17"), funfGhort == "ja") %>%
+  replace_with_na_all(condition = ~ .x %in% na_strings) %>%
+  mutate(gewicht = as.numeric(sub(",", ".", gewicht, fixed = TRUE)),
+         proFunfG = as.factor(proFunfG),
+         partei = as.factor(partei)) %>%
+  filter(complete.cases(.)) %>% 
+  glimpse()
+```
+```{r}
+
+```
+
+### Simple Random Sampling Object
+* fpc: turnout (fpc = finite population correction)
+* id: staging information (in srs only one stage, therfore 1)
+```{r}
+srs_obj <-
+  svydesign(data = five_gdat_prepared,
+            id = ~ 1)
+```
+
+### State of the art design
+
+```{r}
+fiveGDesign <- svydesign(data=five_gdat_prepared, weights = ~gewicht, id = ~1)
+```
+
+
+
+```{r}
+
+svyby( ~proFunfG, by=~partei , design=fiveGDesign , svymean , na.rm = TRUE )
+
+# State of the art with prepared weights
+b <- svyby( ~proFunfG, by=~partei , design=fiveGDesign , svymean , na.rm = TRUE )
+
+barplot(b, ylab="Share", col=c("blue", "red"), width=0.2, las=2)
+legend("topright", 
+       legend = c("Contra", "Pro"), 
+       fill = c("red","blue"),
+       cex = 0.55)
+
+# SRS Design
+b <- svyby( ~proFunfG, by=~partei , design=srs_obj , svymean , na.rm = TRUE )
+
+barplot(b, ylab="Share", col=c("blue", "red"), width=0.2, las=2)
+legend("topright", 
+       legend = c("Contra", "Pro"), 
+       fill = c("red","blue"),
+       cex = 0.55)
+
+```
+
