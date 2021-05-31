@@ -1,7 +1,9 @@
 ---
 title: "ISM Tut - Session 2 - Sampling"
 author: "Niklas Haffert"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -21,52 +23,41 @@ suppressWarnings(if (!require("pacman"))
 ```
 
 * tidyverse: package for all tidy operations (dplyr, ggplot2, ...)
-* urbnmapr: maps 
+* urbnmapr: maps (US States)
 ```{r, message=FALSE}
-pacman::p_load(devtools, tidyverse)
+pacman::p_load(data.table, devtools, R.utils, tidyverse)
 devtools::install_github("UrbanInstitute/urbnmapr")
 pacman::p_load(urbnmapr)
 ```
 
-### Functions
-Load functions stored in an external R-script 
-```{r, message=FALSE}
-source("../functions.R")
-```
-
 ### Seed
-Setting a seed allows to replicate random operations like sampling and get the same result
+Setting a seed allows to replicate random operations like sampling and get the same results
 ```{r set a seed}
-set.seed(2020)
+set.seed(1234)
 ```
 
 ### Data
 * "votes" holds the voting behavior of all voters in the US Presidential Election in 2016 [source](https://dataverse.harvard.edu/dataset.xhtml;jsessionid=1dd02598ea6d8fb7c74571ac4772?persistentId=doi%3A10.7910%2FDVN%2FVOQCHQ&version=&q=&fileTypeGroupFacet=%22Tabular+Data%22&fileAccess=&fileTag=&fileSortField=&fileSortOrder=)
 * "maps_states" is a map of US-States
 ```{r data, message=FALSE}
-votes <- readRDS("../SessionData/usa_2016/us_2016.rds")
+# loading/creating data set for this script
+source("../SessionData/usa_2016/create_us_2016.R")
+
+# loading votes data (created in the "create_us_2016.R" script)
+votes <-
+  fread("../SessionData/usa_2016/us_2016.gz") %>% 
+  as_tibble()
+
+# storing total turnout in variable
+turnout_total <- 136495547
+
+# loading map of US States
 map_states <- get_urbn_map("states", sf = TRUE) %>%
   rename(state = state_name)
 ```
 
 Check out the data
 ```{r check data}
-glimpse(votes)
-```
-
-Add information about turnout
-```{r update data, message=FALSE}
-votes <-
-  votes %>%
-  mutate(voter_id = 1:nrow(.),
-         turnout = nrow(.)) %>%
-  left_join(votes %>%
-              group_by(state) %>%
-              count(name = "turnout_state"))
-```
-
-Checking data again
-```{r}
 glimpse(votes)
 ```
 
@@ -82,29 +73,38 @@ Draw a sample of size 1000 without replacement (SRSWOR)
 ```{r drawing srs}
 srs <-
   votes %>%
-  sample_n(sample_size)
+  # function randomly samples rows from data frame (number of rows determined by size argument)
+  sample_n(size = sample_size)
 ```
 
 ### Visualization
 Visualize which states are represented in the sample
 ```{r map srs, message=FALSE}
+# joining map and our sampled data
 map_states %>%
   left_join(srs %>%
+              # group sampled data by state as we are interested in state level data
               group_by(state) %>%
               count()) %>%
+  # create a labeled variable if an individual was sampled from respective state
   mutate(sampled = ifelse(is.na(n), FALSE, TRUE)) %>%
+  # plotting with ggplot
   ggplot() +
   geom_sf(aes(fill = sampled)) +
-  theme_map()
+  theme_minimal() +
+  theme(axis.text = element_blank())
 ```
+
+Vermont and Hawaii are not represented!
 
 # Stratified Sampling
 ### Sampling
-All states are included and within each state individuals are sampled (number based on the turnout in the state)
+All states are included and within each state individuals are sampled (size based on the turnout in the state)
 ```{r drawing stratified sample}
 str_sample <-
   votes %>%
-  mutate(voters_strata = round(sample_size * turnout_state / turnout)) %>%
+  # determine stratum size for each state
+  mutate(voters_strata = round(sample_size * turnout_state / turnout_total)) %>%
   group_by(state) %>%
   sample_n(voters_strata) %>%
   ungroup()
@@ -120,7 +120,8 @@ map_states %>%
   ggplot(aes(fill = stratum_size)) +
   geom_sf() +
   scale_fill_gradient(low = "white", high = "black") +
-  theme_map()
+  theme_minimal() +
+  theme(axis.text = element_blank())
 ```
 
 # Cluster Sampling / Multi Stage Sampling
@@ -136,25 +137,32 @@ Two sampling stages:
 ```{r drawing cluster sample, message=FALSE}
 states <- 
   votes %>%
+  # assigning probability for each state being selected (based on turnout)
   mutate(p_1 = turnout_state * number_clusters / nrow(.)) %>%
   group_by(state, p_1) %>%
   summarise() %>%
   ungroup() %>%
+  # probability sample of five states
   sample_n(size = number_clusters, weight = p_1) %>% 
+  # create a vector containing the names of the five states
   pull(state)
 
 states
 ```
+North Carolina, Illinois, Tennessee, California and Louisiana were sampled.
 
 2. within this clusters simple random sampling (sizes of the samples based on population size in the clusters)
 ```{r}
 clusters <- 
+  # filter data set down to five sampled states
   votes %>% 
   filter(state %in% states)
 
+## second sampling stage
 cl_sample <- 
   clusters %>% 
   group_by(state) %>% 
+  # sample individuals from five clusters (number of individuals same for all five states (200))
   sample_n(sample_size / number_clusters) %>% 
   ungroup()
 ```
@@ -169,7 +177,8 @@ map_states %>%
   mutate(sampled = ifelse(is.na(n), FALSE, TRUE)) %>%
   ggplot() +
   geom_sf(aes(fill = sampled)) +
-  theme_map()
+  theme_minimal() +
+  theme(axis.text = element_blank())
 ```
 
 # Save samples for further usage in the next session 
