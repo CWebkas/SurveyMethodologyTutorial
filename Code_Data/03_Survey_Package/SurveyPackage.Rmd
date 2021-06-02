@@ -1,7 +1,9 @@
 ---
 title: "ISM Tut - Session 3 - The Survey Package"
 author: "Niklas Haffert"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include = FALSE}
@@ -19,8 +21,16 @@ pacman::p_load(survey, tidyverse)
 ### Data
 3 different samples we specified in the last session and the original population data frame
 ```{r load data}
-srs <- readRDS("../SessionData/usa_2016/srs.rds")
+# Simple Random Sampling
+srs <-
+  readRDS("../SessionData/usa_2016/srs.rds") %>%
+  # specifying turnout for whole USA
+  mutate(turnout_total = 136495547)
+
+# Stratified Sampling
 str <- readRDS("../SessionData/usa_2016/str.rds")
+
+# Cluster Sampling
 cl <- readRDS("../SessionData/usa_2016/cl.rds")
 ```
 
@@ -43,7 +53,7 @@ cl <-
 ```{r srs object}
 srs_obj <-
   svydesign(data = srs,
-            fpc = ~ turnout,
+            fpc = ~ turnout_total,
             id = ~ 1)
 ```
 
@@ -75,12 +85,12 @@ clus_obj <-
 # Estimates
 With the svymean function the mean, based on the complex survey object, can be calculated (true values in the population: Clinton = 48.24%, Trump = 46.14%, Others = 5,62%)
 ```{r svymean srs}
-svymean( ~ name, design = srs_obj)
+svymean( ~ vote, design = srs_obj)
 ```
 
 We can also calculate confidence intervals (95%)
 ```{r ci srs}
-svymean(~ name, design = srs_obj) %>%
+svymean(~ vote, design = srs_obj) %>%
   as.data.frame() %>%
   mutate(lower = mean - 1.96 * SE,
          upper = mean + 1.96 * SE)
@@ -88,28 +98,27 @@ svymean(~ name, design = srs_obj) %>%
 
 With the svytotal function a population total is estimated (true values in the population: Clinton = 65,844,241, Trump = 62,979,031, Others = 7,672,275)
 ```{r svytotal str}
-svytotal( ~ name, design = str_obj)
+svytotal( ~ vote, design = str_obj)
 ```
 
 Again CIs can be calculated
 ```{r ci str}
-svytotal( ~ name, design = str_obj) %>%
+svytotal( ~ vote, design = str_obj) %>%
   as.data.frame() %>%
   mutate(lower = total - 1.96 * SE,
          upper = total + 1.96 * SE)
 ```
 
-
 If you calculate the survey mean and the mean for the cluster sample without weighting according to the survey design, the difference becomes clear
 
 mean by svymean:
 ```{r svymean cl}
-svymean( ~ name, design = clus_obj)
+svymean( ~ vote, design = clus_obj)
 ```
 
-mean by standard mean function:
+mean by standard mean function (without weights):
 ```{r mean cl}
 cl %>%
-  count(name, name = "votes") %>%
+  count(vote, name = "votes") %>%
   mutate(perc = votes / sum(votes))
 ```

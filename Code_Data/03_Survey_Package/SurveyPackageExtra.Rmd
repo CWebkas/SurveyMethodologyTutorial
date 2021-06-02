@@ -1,7 +1,9 @@
 ---
 title: "ISM Tut - Session 3 - Extra"
 author: "Niklas Haffert"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include = FALSE}
@@ -10,17 +12,40 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Preparations
 ### Packages
+* data.table & R.utils loading data
 * fastDummies: dummy variables from character variable
 * survey: analyzing survey data
 * tidyverse: package for all tidy operations (dplyr, ggplot2, ...)
 ```{r, message = FALSE}
-pacman::p_load(fastDummies, survey, tidyverse)
+pacman::p_load(data.table, R.utils, fastDummies, survey, tidyverse)
 ```
 
 ### Functions
-Load functions stored in an external R-script 
+Creating function to perform multiple srs draws from data
 ```{r}
-source("../functions.R")
+srs_obj_fun <-
+  function(data, sample_size) {
+    data %>%
+      # sampling individuals according to sample size
+      sample_n(sample_size) %>%
+      # adding fpc (size of population)
+      mutate(fpc = nrow(data)) %>%
+      # creating a survey design object with sampled data
+      svydesign(data = .,
+                fpc = ~ fpc,
+                id = ~ 1)
+  }
+
+multiple_srs <- function(df, col, n_samples, sample_sizes) {
+  # applying srs_obj_fun multiple times (given by n_samples)
+  map(seq_len(n_samples),
+      ~ srs_obj_fun(data = df, sample_size = sample_sizes)) %>%
+    # calculating survey mean for each sample (col defines for which column)
+    map(., ~ svymean(col, design = .)) %>%
+    # creating one data frame with survey mean and standard errors for all samples
+    map_df(~ as_tibble(.)) %>%
+    rename(se = 2)
+}
 ```
 
 ### Seed
@@ -32,7 +57,8 @@ set.seed(2020)
 ### Data
 load the original population data frame
 ```{r load data}
-votes <- readRDS("../SessionData/usa_2016/us_2016.rds")
+votes <- fread("../SessionData/usa_2016/us_2016.gz") %>%
+  as_tibble()
 ```
 
 ### new variable
@@ -40,25 +66,29 @@ dummy variables for three candidates
 ```{r dummy cols}
 votes <- 
   votes %>%  
-  dummy_cols(select_columns = "name",
+  # dummy (binary) variables for each candidate
+  dummy_cols(select_columns = "vote",
              remove_selected_columns = TRUE) %>%
-  rename(clinton = 2,
-         other = 3,
-         trump = 4)
+  rename(Clinton = 4,
+         Other = 5,
+         Trump = 6)
 ```
 
 ### Multiple Estimates
 Here we use a function to draw 100 simple random samples of 1000 individuals each. The function returns the mean and standard error for each sample. On this basis we calculate the 95% confidence intervals. We estimate the vote share (popular vote) for Hillary Clinton.
 ```{r multiple samples}
-true_val <- mean(votes$clinton)
+true_val <- mean(votes$Clinton)
 
 srs_df <-
+  # sampling 
   multiple_srs(df = votes,
-               col = ~ clinton,
+               col = ~ Clinton,
                n_samples = 100,
                sample_sizes = 1000) %>%
+  # calculating 95% confidence intervals
   mutate(upper = mean + 1.96 * se,
          lower = mean - 1.96 * se) %>%
+  # setting color according to if 95% confidence interval covers true value
   mutate(color = ifelse(true_val < upper &
                           true_val > lower, "green", "red")) %>% 
   arrange(mean) %>% 
@@ -70,11 +100,16 @@ srs_df
 Then we plot the point estimators (mean) and the confidence intervals. If the true value (solid black line) lies within the confidence interval, it is green, if not, it is red.
 ```{r plotting}
 ggplot(srs_df, aes(x = mean, y = run, color = color)) +
-  geom_linerange(aes(xmin = lower, xmax = upper)) +
+  # true value
   geom_vline(aes(xintercept = true_val)) +
+  # confidence intervals
+  geom_linerange(aes(xmin = lower, xmax = upper)) +
+  # point estimates
   geom_point() +
   scale_colour_identity() +
-  theme(axis.title = element_blank(),
+  xlab(label = "Estimate Percentage of Votes for Clinton") +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.y = element_blank())
 ```
