@@ -12,8 +12,7 @@ pacman::p_load(data.table, tidyverse)
 # https://dataverse.harvard.edu/dataset.xhtml;jsessionid=1dd02598ea6d8fb7c74571ac4772?persistentId=doi%3A10.7910%2FDVN%2FVOQCHQ&version=&q=&fileTypeGroupFacet=%22Tabular+Data%22&fileAccess=&fileTag=&fileSortField=&fileSortOrder=
 
 ## load data
-#load("SessionData/usa_2016/countypres_2000-2016.RData")
-load("../SessionData/usa_2016/countypres_2000-2016.RData")
+load("SessionData/usa_2016/countypres_2000-2016.RData")
 
 
 # Processing --------------------------------------------------------------
@@ -63,6 +62,5 @@ df_final <-
   df_long %>%
   left_join(turnout_state)
 
-# save data in rds format
-#fwrite(df_final, "SessionData/usa_2016/us_2016.gz")
-fwrite(df_final, "../SessionData/usa_2016/us_2016.gz")
+# save data in gz format
+fwrite(df_final, "SessionData/usa_2016/us_2016.gz")

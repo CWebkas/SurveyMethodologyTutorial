@@ -40,10 +40,7 @@ set.seed(1234)
 * "votes" holds the voting behavior of all voters in the US Presidential Election in 2016 [source](https://dataverse.harvard.edu/dataset.xhtml;jsessionid=1dd02598ea6d8fb7c74571ac4772?persistentId=doi%3A10.7910%2FDVN%2FVOQCHQ&version=&q=&fileTypeGroupFacet=%22Tabular+Data%22&fileAccess=&fileTag=&fileSortField=&fileSortOrder=)
 * "maps_states" is a map of US-States
 ```{r data, message=FALSE}
-# loading/creating data set for this script
-source("../SessionData/usa_2016/create_us_2016.R")
-
-# loading votes data (created in the "create_us_2016.R" script)
+# loading votes data (created in the "create_us_2016.R" script). If file does not exist it needs to be created via the respective script
 votes <-
   fread("../SessionData/usa_2016/us_2016.gz") %>% 
   as_tibble()

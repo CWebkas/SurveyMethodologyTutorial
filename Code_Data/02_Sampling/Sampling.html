@@ -205,10 +205,7 @@ pacman::p_load(urbnmapr)</code></pre>
 <li>“votes” holds the voting behavior of all voters in the US Presidential Election in 2016 <a href="https://dataverse.harvard.edu/dataset.xhtml;jsessionid=1dd02598ea6d8fb7c74571ac4772?persistentId=doi%3A10.7910%2FDVN%2FVOQCHQ&amp;version=&amp;q=&amp;fileTypeGroupFacet=%22Tabular+Data%22&amp;fileAccess=&amp;fileTag=&amp;fileSortField=&amp;fileSortOrder=">source</a></li>
 <li>“maps_states” is a map of US-States</li>
 </ul>
-<pre class="r"><code># loading/creating data set for this script
-source(&quot;../SessionData/usa_2016/create_us_2016.R&quot;)
-
-# loading votes data (created in the &quot;create_us_2016.R&quot; script)
+<pre class="r"><code># loading votes data (created in the &quot;create_us_2016.R&quot; script)
 votes &lt;-
   fread(&quot;../SessionData/usa_2016/us_2016.gz&quot;) %&gt;% 
   as_tibble()
@@ -253,7 +250,7 @@ map_states %&gt;%
               # group sampled data by state as we are interested in state level data
               group_by(state) %&gt;%
               count()) %&gt;%
-  # create a labeled variable if an individual was sampeld from respective state
+  # create a labeled variable if an individual was sampled from respective state
   mutate(sampled = ifelse(is.na(n), FALSE, TRUE)) %&gt;%
   # plotting with ggplot
   ggplot() +
