@@ -22,6 +22,7 @@ suppressWarnings(if (!require("pacman"))
   install.packages("pacman", repos = "http://cran.r-project.org"))
 ```
 
+* data.table & R.utils loading data
 * tidyverse: package for all tidy operations (dplyr, ggplot2, ...)
 * urbnmapr: maps (US States)
 ```{r, message=FALSE}
@@ -33,7 +34,7 @@ pacman::p_load(urbnmapr)
 ### Seed
 Setting a seed allows to replicate random operations like sampling and get the same results
 ```{r set a seed}
-set.seed(1234)
+set.seed(2020)
 ```
 
 ### Data
@@ -92,7 +93,7 @@ map_states %>%
   theme(axis.text = element_blank())
 ```
 
-Vermont and Hawaii are not represented!
+Note: Vermont is not represented!
 
 # Stratified Sampling
 ### Sampling
