@@ -1,8 +1,9 @@
 ---
 title: "ISM Tut - Session 6 - Missing Data"
 author: "Niklas Haffert"
-date: '`r format(Sys.time(), "%d. %B %Y")`'
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 # Goal of the session
@@ -30,7 +31,10 @@ pacman::p_load(haven, mice, mitools, naniar, purrr, survey, tidyverse)
 
 ### Data
 ```{r, message=FALSE}
-anes <- read_dta("../SessionData/anes_2016/anes_timeseries_2016.dta")
+anes <-
+  read_dta("../SessionData/anes_2016/anes_timeseries_2016.dta") %>%
+  haven::as_factor(levels = "default") %>% 
+  mutate_if(is.factor, as.character)
 ```
 
 # Inspecting Missing Data 
@@ -40,9 +44,25 @@ na_strings <-
   c(
     "-9. Refused",
     "-8. Don't know (FTF only)",
+    "-1. Inap, 2,-8,-9 in V161005 ",
+    "8. Other specify - specified as: DK/don't remember (Web only)",
+    "-99. Refused",
+    "-89. FTF ONLY: Don't recognize ('don't know who this is')",
+    "-88. FTF ONLY: Don't know ('don't know where to rate')",
+    "-7. No post data, deleted due to incomplete IW",
+    "-6. No post-election interview",
+    "998. Don't know (where to rate)",
+    "999. Don't recognize (don't know who this is)",
     "-5. Interview breakoff (sufficient partial IW)",
     "-9. RF (-9) in V161193 or V161193a",
-    "-8. DK (-8) in V161193 or V161193a (FTF only)"
+    "-8. DK (-8) in V161193 or V161193a (FTF only)",
+    "-1. Inap, 2,-8,-9 in V161030/1,4 in V161024x",
+    "6. Other specify - specified as: DK",
+    "7. Other specify - specified as: RF",
+    "8. Other specify - specified as: none/no one/NA",
+    "3. Gary Johnson",
+    "4. Jill Stein",
+    "5. Other candidate {SPECIFY}"
   )
 
 anes_prep <-
@@ -60,53 +80,20 @@ anes_prep <-
     undoc_kids = V161195x,
     voting_purpose = V161031
   ) %>%
-  # 2.
-  replace_with_na_all(condition = ~ .x %in% na_strings |
-                        (as.integer(.x) < 0 |
-                           as.integer(.x) >= 998)) %>%
-  # 3. Reestablish factor levels - note: This is just for illustrative purposes.
+  # 2. replace predefined missing values strings with NA
+  replace_with_na_all(condition = ~ .x %in% na_strings) %>%
+  # 3. turn scores to numeric variables
+  mutate(obama_score = as.numeric(obama_score),
+         chr_fund_score = as.numeric(chr_fund_score)) %>%
+  # 4. for optical reasons change labels in voting purpose
   mutate(
-    vote_last = factor(
-      vote_last,
-      levels = 1:2,
-      labels = c("Obama", "Romney")
-    ),
-    obama_score = as.numeric(obama_score),
-    chr_fund_score = as.numeric(chr_fund_score),
-    primary_voter = factor(
-      primary_voter,
-      levels = 1:2,
-      labels = c("yes", "no")
-    ),
-    think_gov_spend =
-      factor(
-        think_gov_spend,
-        levels = 1:4,
-        labels =
-          c('foreign aid', 'medicare', 'national defense', 'social security')
-      ),
-    undoc_kids =
-      factor(
-        undoc_kids,
-        levels = 1:6,
-        labels =
-          c(
-            'should sent back - favor a great deal',
-            'should sent back - favor a moderate amount',
-            'should sent back - favor a little',
-            'should allow to stay - favor a little',
-            'should allow to stay - favor a moderate amount',
-            'should allow to stay - favor a great deal'
-          )
-      ),
-    voting_purpose = factor(
-      voting_purpose,
-      levels = 1:2,
-      labels =
-        c('Clinton',
-          'Trump')
+    voting_purpose = case_when(
+      voting_purpose == "1. Hillary Clinton" ~ "Clinton",
+      voting_purpose == "2. Donald Trump" ~ "Trump"
     )
-  )
+  ) %>%
+  # 4. turn character variables back to factors as mice (imputation) needs factors
+  mutate_if(is.character, as.factor)
 ```
 
 Summary for all variables. 
@@ -262,9 +249,7 @@ bar_vote <-
     FUN = svymean,
     na.rm = TRUE
   )
-
 barplot(bar_vote, ylab = "Share", col = c("blue", "red"))
-
 legend(
   "topright",
   legend = c("Clinton", "Trump"),
