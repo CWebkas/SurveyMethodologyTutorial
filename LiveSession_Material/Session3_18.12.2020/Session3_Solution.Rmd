@@ -1,7 +1,6 @@
 ---
 title: "Session3"
-author: ""
-date: "17 12 2020"
+author: "Niklas Haffert"
 output: html_document
 ---
 
@@ -31,10 +30,10 @@ pacman::p_load(survey, tidyverse)
 
 2. Load the following data sets (srs, str, cl, cl_multi)
 ```{r}
-srs <- readRDS("Data/srs.rds")
-str <- readRDS("Data/str.rds")
-cl <- readRDS("Data/cl.rds")
-cl_multi <- readRDS("Data/cl_multi.rds")
+srs <- readRDS("srs.rds")
+str <- readRDS("str.rds")
+cl <- readRDS("cl.rds")
+cl_multi <- readRDS("cl_multi.rds")
 ```
 
 3. Inspect the data
