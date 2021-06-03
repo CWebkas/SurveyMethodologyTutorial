@@ -32,14 +32,18 @@ pacman::p_load(haven, mice, mitools, naniar, purrr, survey, tidyverse)
 ### Data
 ```{r, message=FALSE}
 anes <-
+  # read STATA data
   read_dta("../SessionData/anes_2016/anes_timeseries_2016.dta") %>%
+  # get correct labels for factor variables
   haven::as_factor(levels = "default") %>% 
+  # turn factors into characters (better for preprocessig data) 
   mutate_if(is.factor, as.character)
 ```
 
 # Inspecting Missing Data 
 Create a data frame in which NAs that are not labeled as such are replaced by NAs.
 ```{r}
+# 1. Preparation: Specify outcomes, which we want to treat as NA
 na_strings <-
   c(
     "-9. Refused",
@@ -67,7 +71,7 @@ na_strings <-
 
 anes_prep <-
   anes %>%
-  # 1. Select variables of interest and rename cryptic variable names into something we understand
+  # 2. Select variables of interest and rename cryptic variable names into something we understand
   select(
     V160201,
     V160102,
@@ -80,25 +84,27 @@ anes_prep <-
     undoc_kids = V161195x,
     voting_purpose = V161031
   ) %>%
-  # 2. replace predefined missing values strings with NA
+  # 3. replace predefined missing values strings with NA
   replace_with_na_all(condition = ~ .x %in% na_strings) %>%
-  # 3. turn scores to numeric variables
+  # 4. turn scores to numeric variables
   mutate(obama_score = as.numeric(obama_score),
          chr_fund_score = as.numeric(chr_fund_score)) %>%
-  # 4. for optical reasons change labels in voting purpose
+  # 5. for optical reasons change labels in voting purpose
   mutate(
     voting_purpose = case_when(
       voting_purpose == "1. Hillary Clinton" ~ "Clinton",
       voting_purpose == "2. Donald Trump" ~ "Trump"
     )
   ) %>%
-  # 4. turn character variables back to factors as mice (imputation) needs factors
+  # 6. turn character variables back to factors as mice (imputation) needs factors
   mutate_if(is.character, as.factor)
 ```
 
 Summary for all variables. 
 ```{r}
-anes_prep %>% map(summary)
+anes_prep %>% 
+  # map applies the summary function to all variables in the data set
+  map(summary)
 ```
 
 Summary how many missing values there are per variable. 
@@ -145,6 +151,7 @@ imp_meth <-
        print = FALSE)$method %>% 
   as.vector()
 
+# vector with the imputation methods
 imp_meth
 ```
 
@@ -163,7 +170,9 @@ Imputation with the mice function.
 ```{r}
 imp <-
   mice(anes_prep,
+       # using the methods we specified previously
        method = imp_meth,
+       # using the predictor matrix we specified previously
        predictorMatrix = pred_matrix,
        seed = 2020,
        print = FALSE)
@@ -172,7 +181,8 @@ imp <-
 Create a imputation list which is used for the following analysis. The function complete takes an object of class mids (imp in our case), fills in the missing data, and returns the completed data. map is used to apply complete to all five imputations. imputationList combines data sets into one list.
 ```{r}
 imp_data <-
-  imputationList(map(seq(imp$m), mice::complete, data = imp))
+  map(seq(imp$m), ~ complete(data = imp)) %>% 
+  imputationList() 
 ```
 
 # Survey Design Objects
@@ -205,7 +215,10 @@ unimp_design <-
 Mean for voting_purpose (imputed data).
 ```{r, message=FALSE}
 imp_results <- with(imp_design, svymean(~ voting_purpose))
-summary(MIcombine(imp_results))
+
+imp_results %>% 
+  MIcombine() %>% 
+  summary()
 ```
 
 Mean for voting_purpose (data without imputation).
