@@ -23,7 +23,7 @@ Use a new code snippet for every exercise.
 
 1. load the 2012 French presidential election data
 ```{r}
-load("Data/runoff.Rda") # pay attention where you have saved the runoff data set on your PC!
+load("runoff.Rda") # pay attention where you have saved the runoff data set on your PC!
 ```
 
 2. inspect the data
